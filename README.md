@@ -12,6 +12,9 @@ Steps on how to run:
 
 // File structure:
 // - App.js (main entry point)
+//   (app.json)
+//   (index.js)
+//   (package.json)
 // - Server.js
 // - components/
 //   - QRScanner.js (scanner component)
