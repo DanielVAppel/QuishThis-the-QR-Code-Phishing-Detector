@@ -5,7 +5,6 @@ Steps on how to run:
 2.make sure that you are in the proper directory (quishThis) by typing in the command:
  cd quishThis
 3.type in the command -> npm install
-4.type in the command -> npm install expo-camera axios react-native-url-polyfill expo-font
 5.type in the command -> npm start
 (make sure that you have the expo go app already installed)
 6.scan the QR code with your camera and then scan a QR code through the program.
