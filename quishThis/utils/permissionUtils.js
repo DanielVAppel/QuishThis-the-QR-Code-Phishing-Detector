@@ -1,17 +1,18 @@
 //permission handling
 // utils/permissionUtils.js
-import { BarCodeScanner } from 'expo-barcode-scanner';
+//Code was updated from barscanner which was deprecated.
+import * as Camera from 'expo-camera';
 
 /**
-* Request camera permission from the user
-* @returns {Promise<boolean>} - Whether permission was granted
-*/
+ * Request camera permission from the user
+ * @returns {Promise<boolean>} - Whether permission was granted
+ */
 export async function requestCameraPermission() {
-try {
-const { status } = await BarCodeScanner.requestPermissionsAsync();
-return status === 'granted';
-} catch (error) {
-console.error('Error requesting camera permission:', error);
-return false;
-}
+  try {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    return status === 'granted';
+  } catch (error) {
+    console.error('Error requesting camera permission:', error);
+    return false;
+  }
 }
