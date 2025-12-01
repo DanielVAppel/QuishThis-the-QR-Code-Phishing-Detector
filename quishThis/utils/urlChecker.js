@@ -2,6 +2,7 @@
 // utils/urlChecker.js
 // Add these functions to utils/urlChecker.js
 
+// utils/urlChecker.js
 import 'react-native-url-polyfill/auto';
 import axios from 'axios';
 
@@ -10,7 +11,8 @@ async function expandShortUrl(url) {
   // Common URL shortener domains
   const shortenerDomains = [
     'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'youtu.be', 'ow.ly',
-    'is.gd', 'buff.ly', 'rebrand.ly', 'cutt.ly', 'tiny.cc', 'shorturl.at'
+    'is.gd', 'buff.ly', 'rebrand.ly', 'cutt.ly', 'tiny.cc', 'shorturl.at',
+    'short.io', 'bitly.com', 'rb.gy'
   ];
 
   try {
@@ -24,31 +26,32 @@ async function expandShortUrl(url) {
     }
 
     // Make a HEAD request to follow redirects without downloading content
-    const response = await axios.head(url, {
+    const response = await axios.get(url, {
       maxRedirects: 5,
-      validateStatus: null, // Accept all status codes to handle unusual responses
-      timeout: 5000 // 5 second timeout
+      validateStatus: () => true, // Accept all status codes
+      timeout: 5000, // 5 second timeout
+      maxContentLength: 1000, // Only get headers, not content
     });
 
-    // If there's a redirect, get the final URL
-    if (response.request && response.request.res && response.request.res.responseUrl) {
-      return response.request.res.responseUrl;
+    // Get the final URL after redirects
+    if (response.request && response.request.responseURL) {
+      return response.request.responseURL;
     }
 
-    return url; // No redirect found or couldn't determine
+    return url; // No redirect found
   } catch (error) {
-    console.error('Error expanding shortened URL:', error);
+    console.error('Error expanding shortened URL:', error.message);
     return url; // Return original URL on error
   }
 }
 
 // Function 2: Domain reputation checking
-// Helper function to extract root domain
 function extractRootDomain(domain) {
   const parts = domain.split('.');
   if (parts.length > 2) {
     // Handle special cases like co.uk
-    if (parts[parts.length - 2] === 'co' || parts[parts.length - 2] === 'com') {
+    const twoPartTLDs = ['co', 'com', 'org', 'net', 'gov', 'edu', 'ac'];
+    if (twoPartTLDs.includes(parts[parts.length - 2])) {
       return `${parts[parts.length - 3]}.${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
     }
     return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
@@ -59,37 +62,66 @@ function extractRootDomain(domain) {
 async function checkDomainReputation(domain) {
   try {
     const reputation = {
-      score: 0, // 0-100, higher is better
+      score: 50, // 0-100, higher is better (default to neutral)
       knownBad: false,
       knownGood: false,
-      ageSignal: null,
       details: []
     };
 
-    // Check against list of known trusted domains
-    const trustedDomains = ['google.com', 'microsoft.com', 'apple.com', 'amazon.com', 'github.com'];
-    const isTrustedRoot = trustedDomains.some(trusted => {
-      const rootDomain = extractRootDomain(domain);
-      return rootDomain === trusted;
-    });
+    // Expanded list of known trusted domains
+    const trustedDomains = [
+      'google.com', 'microsoft.com', 'apple.com', 'amazon.com', 'github.com',
+      'youtube.com', 'facebook.com', 'twitter.com', 'linkedin.com', 'instagram.com',
+      'netflix.com', 'spotify.com', 'reddit.com', 'wikipedia.org', 'stackoverflow.com',
+      'medium.com', 'paypal.com', 'ebay.com', 'zoom.us', 'dropbox.com'
+    ];
+    
+    const rootDomain = extractRootDomain(domain);
+    const isTrustedRoot = trustedDomains.some(trusted => rootDomain === trusted);
 
     if (isTrustedRoot) {
       reputation.knownGood = true;
       reputation.score = 90;
       reputation.details.push('Domain is from a trusted provider');
+      return reputation;
     }
 
     // Check domain age using WHOIS (would require server-side API)
     // This is just a placeholder - in real implementation you'd call a WHOIS API
     // For demo purposes: check if domain has common TLDs or suspicious TLDs
-    const suspiciousTlds = ['.xyz', '.top', '.club', '.online', '.info'];
+    // Check for suspicious TLDs
+    const suspiciousTlds = ['.xyz', '.top', '.club', '.online', '.info', '.biz', '.work', '.click', '.link', '.download'];
     const hasWeirdTld = suspiciousTlds.some(tld => domain.endsWith(tld));
     if (hasWeirdTld) {
       reputation.score -= 20;
       reputation.details.push('Domain uses an uncommon TLD');
     }
 
-    // Return the reputation object
+    // Check for excessively long domains (common in phishing)
+    if (domain.length > 40) {
+      reputation.score -= 10;
+      reputation.details.push('Unusually long domain name');
+    }
+
+    // Check for multiple subdomains (common in phishing)
+    const subdomainCount = domain.split('.').length - 2;
+    if (subdomainCount > 2) {
+      reputation.score -= 15;
+      reputation.details.push('Multiple subdomains detected');
+    }
+
+    // Check for numbers in domain (sometimes suspicious)
+    if (/\d{3,}/.test(domain)) {
+      reputation.score -= 5;
+      reputation.details.push('Contains multiple numbers');
+    }
+
+    // If score is still neutral and no red flags, give a slight positive bump
+    if (reputation.score === 50 && reputation.details.length === 0) {
+      reputation.score = 60;
+      reputation.details.push('No immediate red flags detected');
+    }
+
     return reputation;
   } catch (error) {
     console.error('Error checking domain reputation:', error);
@@ -99,10 +131,12 @@ async function checkDomainReputation(domain) {
 
 // Function 3: Typosquatting detection
 function checkForTyposquatting(domain) {
-  // List of popular domains that might be typosquatted
+  // Expanded list of popular domains that might be typosquatted
   const popularDomains = [
     'google.com', 'facebook.com', 'amazon.com', 'apple.com', 'netflix.com',
-    'microsoft.com', 'gmail.com', 'yahoo.com', 'instagram.com', 'twitter.com'
+    'microsoft.com', 'gmail.com', 'yahoo.com', 'instagram.com', 'twitter.com',
+    'paypal.com', 'linkedin.com', 'ebay.com', 'youtube.com', 'reddit.com',
+    'spotify.com', 'github.com', 'dropbox.com', 'slack.com', 'zoom.us'
   ];
 
   const result = {
@@ -111,25 +145,22 @@ function checkForTyposquatting(domain) {
     score: 0 // 0-100, higher means more suspicious
   };
 
-  // Simple Levenshtein distance to check similarity
-  const findSimilarity = (s1, s2) => {
+  // Levenshtein distance calculation
+  const levenshtein = (s1, s2) => {
     const longerStr = s1.length > s2.length ? s1 : s2;
     const shorterStr = s1.length > s2.length ? s2 : s1;
-    // Exit early if length difference is too big
+    
     if (longerStr.length - shorterStr.length > 3) return 0;
 
-    let costs = [];
-    for (let i = 0; i <= shorterStr.length; i++) {
-      costs[i] = i;
-    }
-
+    const costs = Array(shorterStr.length + 1).fill(0).map((_, i) => i);
+    
     for (let i = 1; i <= longerStr.length; i++) {
       costs[0] = i;
       let nw = i - 1;
       for (let j = 1; j <= shorterStr.length; j++) {
-        let cj = Math.min(
-          1 + Math.min(costs[j], costs[j-1]),
-          longerStr[i-1] === shorterStr[j-1] ? nw : nw + 1
+        const cj = Math.min(
+          1 + Math.min(costs[j], costs[j - 1]),
+          longerStr[i - 1] === shorterStr[j - 1] ? nw : nw + 1
         );
         nw = costs[j];
         costs[j] = cj;
@@ -141,34 +172,35 @@ function checkForTyposquatting(domain) {
 
   // Check against each popular domain
   for (const popularDomain of popularDomains) {
-    const similarity = findSimilarity(
-      domain.replace(/\./g, '').toLowerCase(),
-      popularDomain.replace(/\./g, '').toLowerCase()
-    );
+    const domainWithoutTld = domain.replace(/\.[^.]+$/, '').toLowerCase();
+    const popularWithoutTld = popularDomain.replace(/\.[^.]+$/, '').toLowerCase();
+    
+    const similarity = levenshtein(domainWithoutTld, popularWithoutTld);
 
     // If similarity is high but not exact match
-    if (similarity > 0.8 && similarity < 1.0) {
+    if (similarity > 0.75 && similarity < 1.0) {
       result.suspicious = true;
       result.similarTo = popularDomain;
       result.score = Math.round(similarity * 100);
       break;
     }
-  }
 
-  // Additional checks for common typosquatting techniques
-  for (const popularDomain of popularDomains) {
-    const root = popularDomain.split('.')[0];
-    // Check for added characters
-    if (domain.includes(root) && domain !== popularDomain) {
+    // Check for added characters or hyphens
+    if (domainWithoutTld.includes(popularWithoutTld) && domain !== popularDomain) {
       result.suspicious = true;
       result.similarTo = popularDomain;
       result.score = 85;
       break;
     }
 
-    // Check for character substitution (like '0' for 'o')
-    const normalizedDomain = domain.replace(/0/g, 'o').replace(/1/g, 'l');
-    if (normalizedDomain.includes(root) && domain !== popularDomain) {
+    // Check for character substitution (like '0' for 'o', '1' for 'l')
+    const normalizedDomain = domainWithoutTld
+      .replace(/0/g, 'o')
+      .replace(/1/g, 'l')
+      .replace(/5/g, 's')
+      .replace(/8/g, 'b');
+    
+    if (normalizedDomain === popularWithoutTld && domain !== popularDomain) {
       result.suspicious = true;
       result.similarTo = popularDomain;
       result.score = 90;
@@ -189,32 +221,68 @@ function scanForMaliciousPatterns(url) {
 
   // Common patterns in phishing or malicious URLs
   const patterns = [
-    { pattern: /\/password|passwd|login|signin|authenticate|auth|account|acct|secure|banking/i,
-      description: 'Contains sensitive action terms'},
-    { pattern: /\.(exe|dll|bat|sh|msi)$/i,
-      description: 'Links to executable file' },
-    { pattern: /\?[^=]+=https?%3A/i,
-      description: 'Contains URL redirection pattern' },
-    { pattern: /@/i,
-      description: 'Contains @ symbol (potential URL trickery)' },
-    { pattern: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/i,
-      description: 'Contains raw IP address instead of domain' },
-    { pattern: /[^\w\-\.\/\?\=\&\%]/i,
-      description: 'Contains unusual URL characters' },
-    { pattern: /free|offer|prize|won|winner|discount|deal|promo|gift/i,
-      description: 'Contains marketing bait terms' },
-    { pattern: /password|passwd|credentials|credit|wallet|ssn|social|bank|login/i,
-      description: 'Contains terms related to sensitive information' },
-    { pattern: /verify|confirm|update|secure|protect|restore|unlock/i,
-      description: 'Contains action terms often used in phishing' }
+    { 
+      pattern: /password|passwd|login|signin|authenticate|auth|account|verify|confirm|update/i,
+      description: 'Contains sensitive action terms',
+      weight: 15
+    },
+    { 
+      pattern: /\.(exe|dll|bat|sh|msi|scr|vbs|ps1)(\?|$)/i,
+      description: 'Links to executable file',
+      weight: 30
+    },
+    { 
+      pattern: /\?[^=]+=https?%3A/i,
+      description: 'Contains URL redirection pattern',
+      weight: 20
+    },
+    { 
+      pattern: /@/,
+      description: 'Contains @ symbol (potential URL trickery)',
+      weight: 25
+    },
+    { 
+      pattern: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,
+      description: 'Uses raw IP address instead of domain',
+      weight: 20
+    },
+    { 
+      pattern: /free|offer|prize|won|winner|discount|urgent|act.now|limited.time/i,
+      description: 'Contains marketing bait terms',
+      weight: 10
+    },
+    { 
+      pattern: /credit|wallet|ssn|social.security|bank|payment/i,
+      description: 'Contains financial/sensitive terms',
+      weight: 15
+    },
+    { 
+      pattern: /secure|protect|restore|unlock|suspended|unusual.activity/i,
+      description: 'Contains urgency/fear tactics',
+      weight: 12
+    },
+    {
+      pattern: /-|_/g,
+      description: 'Excessive use of hyphens or underscores',
+      weight: 5,
+      countBased: true,
+      threshold: 3
+    }
   ];
 
   // Check each pattern
-  patterns.forEach(({ pattern, description }) => {
-    if (pattern.test(url)) {
+  patterns.forEach(({ pattern, description, weight, countBased, threshold }) => {
+    if (countBased) {
+      const matches = url.match(pattern);
+      if (matches && matches.length > threshold) {
+        results.suspicious = true;
+        results.patterns.push(description);
+        results.score += weight;
+      }
+    } else if (pattern.test(url)) {
       results.suspicious = true;
       results.patterns.push(description);
-      results.score += 15; // Increment suspicion score
+      results.score += weight;
     }
   });
 
@@ -223,7 +291,7 @@ function scanForMaliciousPatterns(url) {
   return results;
 }
 
-// Main URL safety checking function (update this to use the new functions)
+// Main URL safety checking function
 export async function checkUrlSafety(url) {
   try {
     const results = {
@@ -255,8 +323,9 @@ export async function checkUrlSafety(url) {
     results.https = url.startsWith('https://');
     
     // Basic URL validation using URL constructor (will throw if invalid)
+    let urlObj;
     try {
-      new URL(url);
+      urlObj = new URL(url);
     } catch (error) {
       return {
         isUrl: true,
@@ -266,7 +335,7 @@ export async function checkUrlSafety(url) {
     }
     
     // Extract domain for further checks
-    const domain = new URL(url).hostname;
+    const domain = urlObj.hostname;
     
     // Step 2: Check domain reputation
     results.domainReputation = await checkDomainReputation(domain);
@@ -277,75 +346,80 @@ export async function checkUrlSafety(url) {
     // Step 4: Scan for malicious patterns
     results.maliciousPatterns = scanForMaliciousPatterns(url);
 
-    // Check for suspicious/phishing domains (simplified example)
-    const suspiciousDomains = [
-      'phishing', 'scam', 'malware', 'virus', 'hack',
-      'free-prize', 'claim-reward', 'authenticate', 'verify-account',
-      'account-alert', 'secure-login', 'signin', 'login-verify'
+    // Check for suspicious/phishing domains (expanded list)
+    const suspiciousKeywords = [
+      'phishing', 'scam', 'malware', 'virus', 'hack', 'free-prize', 
+      'claim-reward', 'authenticate', 'verify-account', 'account-alert', 
+      'secure-login', 'signin-verify', 'update-required', 'suspended-account',
+      'confirm-identity', 'unusual-activity', 'security-alert'
     ];
     
-    const containsSuspiciousTerm = suspiciousDomains.some(term => 
-      domain.toLowerCase().includes(term.toLowerCase())
+    const containsSuspiciousTerm = suspiciousKeywords.some(term => 
+      domain.toLowerCase().includes(term.toLowerCase()) ||
+      urlObj.pathname.toLowerCase().includes(term.toLowerCase())
     );
     
     if (containsSuspiciousTerm) {
       results.maliciousCheck = true;
-      results.details = 'Domain contains suspicious terms.';
+      results.details = 'URL contains suspicious terms commonly used in phishing.';
     }
 
-    // Check for SSL/TLS (this is a simplified check)
-    // In a real app, you would use a server-side proxy for this
+    // Check for SSL/TLS (simplified check)
     if (results.https) {
       try {
-        // Simple HEAD request to check if the cert is valid
-        // Note: This isn't a complete cert validation, just a basic check
-        await axios.head(url, { timeout: 5000 });
+        // Simple request to check if the connection works
+        await axios.head(url, { 
+          timeout: 5000,
+          validateStatus: () => true // Accept any status
+        });
         results.validCert = true;
       } catch (error) {
-        // If there's an SSL error, the cert may be invalid
-        // But this could also be other network errors
         results.validCert = false;
-        results.details = 'Could not validate SSL/TLS certificate.';
+        if (error.code === 'CERT_HAS_EXPIRED' || error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+          results.details = 'SSL/TLS certificate validation failed.';
+        }
       }
     }
 
     // Google Safe Browsing API check (simplified version)
-    // In real app, you would use a server-side proxy for this API call
+    // In real app, use a server-side proxy for this API call
     // The following is just to demonstrate the concept
-    try {
-      // For this demo, we'll use a simplified "mock" check
-      // In reality, you should implement the actual API call above
-      const isMalicious = domain.includes('evil') || 
-        domain.includes('phish') || 
-        domain.includes('malware');
-      
-      if (isMalicious) {
-        results.maliciousCheck = true;
-        results.details = 'URL flagged as potentially malicious.';
-      }
+    // For this demo, we'll use a simplified "mock" check
+    // In reality, implement the actual API call above
 
-      // Add domain info (in a real app you might use WHOIS data)
-      results.domainInfo = `Domain: ${domain}`;
-    } catch (error) {
-      console.error('Error during malicious check:', error);
-      // If we can't check, warn the user
-      results.details = 'Could not complete security check. Proceed with caution.';
-    }
+    // Add domain info
+    results.domainInfo = `Domain: ${domain}`;
 
     // Determine final safety assessment based on all checks
-    // A URL is considered safe if:
-    // 1. It uses HTTPS
-    // 2. It has a valid SSL/TLS certificate (or we couldn't check)
-    // 3. It wasn't flagged as malicious
-    // 4. Its domain reputation is good
-    // 5. It's not a typosquatting attempt
-    // 6. It doesn't contain malicious patterns
-    results.safe = results.https && 
-      (results.validCert || results.validCert === null) && 
-      !results.maliciousCheck &&
-      (results.domainReputation && results.domainReputation.score >= 50) &&
-      (!results.typosquatting || !results.typosquatting.suspicious) &&
-      (!results.maliciousPatterns || results.maliciousPatterns.score < 30);
+    // Calculate a composite safety score
+    let safetyScore = 50; // Start neutral
+
+    // HTTPS adds security
+    if (results.https) safetyScore += 20;
+    if (results.validCert) safetyScore += 10;
+
+    // Domain reputation affects score
+    if (results.domainReputation) {
+      safetyScore += (results.domainReputation.score - 50) * 0.4;
+    }
+
+    // Malicious patterns reduce score
+    if (results.maliciousPatterns && results.maliciousPatterns.score > 0) {
+      safetyScore -= results.maliciousPatterns.score * 0.5;
+    }
+
+    // Typosquatting is a major red flag
+    if (results.typosquatting && results.typosquatting.suspicious) {
+      safetyScore -= 30;
+    }
+
+    // Known malicious content
+    if (results.maliciousCheck) {
+      safetyScore -= 40;
+    }
+
+    // Final decision: safe if score >= 60
+    results.safe = safetyScore >= 60;
 
     return results;
   } catch (error) {
@@ -353,7 +427,7 @@ export async function checkUrlSafety(url) {
     return {
       isUrl: true,
       safe: false,
-      details: 'Error analyzing URL safety. Proceed with caution.'
+      details: 'Error analyzing URL safety. Proceed with extreme caution.'
     };
   }
 }

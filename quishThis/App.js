@@ -1,30 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Camera } from 'expo-camera';
+import { useCameraPermissions } from 'expo-camera';
 import { useFonts } from 'expo-font';
 import HomeScreen from './components/HomeScreen';
 import QRScanner from './components/QRScanner';
 
 export default function App() {
-  const [hasPermission, setHasPermission] = useState(null);
   const [currentScreen, setCurrentScreen] = useState('home');
+  const [permission, requestPermission] = useCameraPermissions();
 
   // Load the Minecraft font
   const [fontsLoaded] = useFonts({
     Minecraftia: require('./assets/fonts/Minecraftia-Regular.ttf'),
   });
 
-  // Request camera permissions on mount
-  useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
-  }, []);
-
   // Handle starting the QR scanner
-  const handleStartScanning = () => {
+  const handleStartScanning = async () => {
+    // Request permission if not granted
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        return; // Permission denied
+      }
+    }
     setCurrentScreen('scanner');
   };
 
@@ -42,25 +41,17 @@ export default function App() {
     );
   }
 
-  // Permission denied state
-  if (hasPermission === false) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Camera permission denied.</Text>
-        <Text style={styles.subText}>
-          QR Scanner needs camera access to scan QR codes.
-        </Text>
-      </View>
-    );
-  }
-
   // Render the current screen
   return (
     <>
       {currentScreen === 'home' ? (
         <HomeScreen onStartScanning={handleStartScanning} />
       ) : (
-        <QRScanner onExitScanner={handleExitScanner} />
+        <QRScanner 
+          onExitScanner={handleExitScanner}
+          hasPermission={permission?.granted}
+          requestPermission={requestPermission}
+        />
       )}
       <StatusBar style="auto" />
     </>

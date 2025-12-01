@@ -1,9 +1,7 @@
-//scanner component
 // components/QRScanner.js
-// components/QRScanner.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { CameraView, Camera } from 'expo-camera';
+import { CameraView } from 'expo-camera';
 import { checkUrlSafety } from '../utils/urlChecker';
 import SafetyResults from './SafetyResults';
 
@@ -11,11 +9,10 @@ import SafetyResults from './SafetyResults';
  * QRScanner Component - Handles the QR code scanning functionality
  * @param {object} props - Component props
  * @param {function} props.onExitScanner - Function to call when exiting scanner mode
+ * @param {boolean} props.hasPermission - Camera permission status
+ * @param {function} props.requestPermission - Function to request camera permission
  */
-export default function QRScanner({ onExitScanner }) {
-  // Permission state
-  const [hasPermission, setHasPermission] = useState(null);
-  
+export default function QRScanner({ onExitScanner, hasPermission, requestPermission }) {
   // Scanning states
   const [scanned, setScanned] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
@@ -26,19 +23,6 @@ export default function QRScanner({ onExitScanner }) {
   
   // Reference to prevent multiple simultaneous scans
   const isProcessingRef = useRef(false);
-  
-  // Camera reference
-  const cameraRef = useRef(null);
-
-  // Request camera permission on component mount
-  useEffect(() => {
-    const getPermission = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
-    
-    getPermission();
-  }, []);
 
   /**
    * Handle QR code scan event
@@ -92,14 +76,15 @@ export default function QRScanner({ onExitScanner }) {
     setScanned(false);
     setScannedData(null);
     setSafetyResults(null);
+    setIsChecking(false);
     // Give a small delay before allowing new scans
     setTimeout(() => {
       isProcessingRef.current = false;
-    }, 1000);
+    }, 500);
   };
 
   // Handle different permission states
-  if (hasPermission === null) {
+  if (hasPermission === null || hasPermission === undefined) {
     return (
       <View style={styles.container}>
         <Text style={styles.permissionText}>Requesting camera permission...</Text>
@@ -114,7 +99,21 @@ export default function QRScanner({ onExitScanner }) {
         <Text style={styles.permissionSubtext}>
           QR Scanner needs camera access to scan QR codes.
         </Text>
-        <TouchableOpacity style={styles.button} onPress={onExitScanner}>
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={async () => {
+            const result = await requestPermission();
+            if (!result.granted) {
+              Alert.alert(
+                'Permission Required',
+                'Please enable camera permission in your device settings to use the QR scanner.'
+              );
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onExitScanner}>
           <Text style={styles.buttonText}>Back to Home</Text>
         </TouchableOpacity>
       </View>
@@ -139,9 +138,10 @@ export default function QRScanner({ onExitScanner }) {
       {/* Camera view that scans QR codes */}
       <CameraView
         style={StyleSheet.absoluteFillObject}
-        ref={cameraRef}
         facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        barcodeScannerSettings={{ 
+          barcodeTypes: ['qr'] 
+        }}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       >
         {/* Scanning frame overlay */}
@@ -194,17 +194,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000',
   },
   permissionText: {
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
     margin: 20,
+    color: '#fff',
   },
   permissionSubtext: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#555',
+    color: '#ccc',
     marginHorizontal: 40,
     marginBottom: 30,
   },
@@ -315,6 +317,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     borderRadius: 25,
     marginTop: 20,
+  },
+  secondaryButton: {
+    backgroundColor: '#555',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginTop: 10,
   },
   buttonText: {
     color: 'white',
