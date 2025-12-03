@@ -42,7 +42,7 @@
 - **Node.js** v18 or newer
 - **npm** or yarn
 - **Expo Go** app on your mobile device
-- **API Keys** (optional but recommended - see [API Setup](#api-setup))
+- **API Keys** (optional but recommended)
 
 ---
 
@@ -65,9 +65,8 @@ Create a `.env` file in the project root:
 GOOGLE_SAFE_BROWSING_API_KEY=your_key_here
 WHOIS_API_KEY=your_key_here
 VIRUS_TOTAL_API_KEY=your_key_here
+URLSCAN_API_KEY=your_key_here
 ```
-
-See [API_SETUP_GUIDE.md](./API_SETUP_GUIDE.md) for detailed instructions.
 
 ### 4. Start the Backend Server (Optional)
 ```bash
@@ -347,7 +346,6 @@ npm install
 
 ## 📚 Documentation
 
-- [API Setup Guide](./API_SETUP_GUIDE.md) - Detailed API configuration
 - [YouTube Demo](https://youtu.be/SyWCBadpYAA) - Video walkthrough
 - [Project Presentation](./CS%206640%20QuishThis%20Final%20Project.pdf) - Academic presentation
 
@@ -371,9 +369,8 @@ QuishThis is an educational project designed for basic QR code security checking
 Having issues? Check these resources:
 
 1. [GitHub Issues](https://github.com/DanielVAppel/QuishThis/issues)
-2. [API Setup Guide](./API_SETUP_GUIDE.md)
-3. [Troubleshooting Section](#troubleshooting)
-4. [Expo Documentation](https://docs.expo.dev/)
+2. [Troubleshooting Section](#troubleshooting)
+3. [Expo Documentation](https://docs.expo.dev/)
 
 ---
 
