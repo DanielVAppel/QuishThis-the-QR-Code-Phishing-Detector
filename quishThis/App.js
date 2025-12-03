@@ -1,15 +1,3 @@
-// Fix for Node.js v20.11.1 Metro bundler bug
-if (!URL.canParse) {
-  URL.canParse = function(url) {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-}
-
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
